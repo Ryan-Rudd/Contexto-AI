@@ -55,7 +55,7 @@ A premium, dark-mode UI designed for immersion.
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/your-username/contexto-ai.git
+git clone https://github.com/ryan-rudd/contexto-ai.git
 cd contexto-ai
 ```
 
