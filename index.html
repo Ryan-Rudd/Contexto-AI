@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contexto + AI Semantics</title>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0d0d10;
+            --text-color: #e0e0e0;
+            --input-bg: #1c1c1f;
+            --input-border: #2c2c2f;
+            --accent-color: #00d4ff;
+            --accent-glow: rgba(0, 212, 255, 0.4);
+            --card-bg: #161619;
+            --high-rank: #00ff9d;
+            --mid-rank: #ffd700;
+            --low-rank: #ff4757;
+            --font-family: 'Space Grotesk', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: var(--font-family);
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            overflow: hidden;
+            /* Prevent body scroll */
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1400px;
+            padding: 30px;
+            display: grid;
+            grid-template-columns: 1fr 1.2fr;
+            gap: 30px;
+            height: 100vh;
+        }
+
+        @media (max-width: 1000px) {
+            .container {
+                grid-template-columns: 1fr;
+                height: auto;
+            }
+        }
+
+        /* --- Left Column: Game --- */
+        .game-column {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            height: 100%;
+        }
+
+        header {
+            background: linear-gradient(90deg, #1c1c1f, #161619);
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid #2a2a2e;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: white;
+            letter-spacing: -0.05em;
+        }
+
+        .tag {
+            font-size: 0.75rem;
+            color: #888;
+            background: #222;
+            padding: 4px 8px;
+            border-radius: 4px;
+            border: 1px solid #333;
+        }
+
+        .input-area {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 16px;
+            box-sizing: border-box;
+            border-radius: 8px;
+            border: 2px solid var(--input-border);
+            background: var(--input-bg);
+            color: white;
+            font-size: 1.1rem;
+            font-family: var(--font-family);
+            transition: all 0.2s;
+        }
+
+        .input-group input:focus {
+            border-color: var(--accent-color);
+            box-shadow: 0 0 15px var(--accent-glow);
+            outline: none;
+        }
+
+        .error-msg {
+            color: var(--low-rank);
+            font-size: 0.9rem;
+            margin-top: 5px;
+            min-height: 20px;
+        }
+
+        #guesses-scroll {
+            flex: 1;
+            overflow-y: auto;
+            padding-right: 5px;
+        }
+
+        /* Custom Scrollbar */
+        #guesses-scroll::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        #guesses-scroll::-webkit-scrollbar-track {
+            background: #111;
+        }
+
+        #guesses-scroll::-webkit-scrollbar-thumb {
+            background: #333;
+            border-radius: 3px;
+        }
+
+        .guess-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 15px;
+            background: var(--card-bg);
+            border-radius: 8px;
+            border-left: 4px solid #333;
+            margin-bottom: 8px;
+            transition: transform 0.2s, background 0.2s;
+        }
+
+        .guess-row:hover {
+            background: #222;
+            transform: translateX(2px);
+        }
+
+        .guess-row.rank-1 {
+            border-color: var(--high-rank);
+            background: rgba(0, 255, 157, 0.1);
+            box-shadow: 0 0 10px rgba(0, 255, 157, 0.2);
+        }
+
+        .guess-row.rank-high {
+            border-color: var(--high-rank);
+        }
+
+        .guess-row.rank-mid {
+            border-color: var(--mid-rank);
+        }
+
+        .guess-row.rank-low {
+            border-color: var(--low-rank);
+        }
+
+        .rank-badge {
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        /* --- Right Column: Vis + AI --- */
+        .vis-column {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            height: 100%;
+        }
+
+        .vis-card {
+            background: var(--card-bg);
+            border-radius: 12px;
+            border: 1px solid #2a2a2e;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .vis-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .vis-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #ddd;
+        }
+
+        /* 3D Graph */
+        #graph-container {
+            width: 100%;
+            height: 400px;
+            /* Base height */
+            flex-grow: 1;
+            background: #111;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.8);
+        }
+
+        /* AI Panel */
+        .ai-panel {
+            background: #1a1a1d;
+            border: 1px solid #333;
+        }
+
+        .ai-controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        button.ai-btn {
+            background: linear-gradient(135deg, #00d4ff, #005bea);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.1s;
+            box-shadow: 0 4px 15px rgba(0, 212, 255, 0.3);
+            font-family: var(--font-family);
+        }
+
+        button.ai-btn:hover {
+            transform: scale(1.05);
+        }
+
+        button.ai-btn:active {
+            transform: scale(0.95);
+        }
+
+        .ai-status {
+            margin-top: 15px;
+            padding: 15px;
+            background: #0d0d10;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            color: #bbb;
+            border-left: 3px solid var(--accent-color);
+            min-height: 40px;
+            line-height: 1.5;
+        }
+
+        .ai-meta {
+            margin-top: 20px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            font-size: 0.8rem;
+            color: #666;
+        }
+
+        .ai-meta div strong {
+            color: #888;
+            display: block;
+            margin-bottom: 3px;
+        }
+
+        /* Win Modal */
+        #win-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(8px);
+            z-index: 100;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+        }
+
+        #win-overlay.active {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        .win-card {
+            background: #1e1e24;
+            padding: 40px;
+            border-radius: 20px;
+            text-align: center;
+            border: 2px solid var(--high-rank);
+            box-shadow: 0 0 50px rgba(0, 255, 157, 0.2);
+            max-width: 400px;
+            width: 90%;
+        }
+
+        .win-word {
+            font-size: 3rem;
+            font-weight: 800;
+            color: white;
+            margin: 20px 0;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            background: linear-gradient(180deg, #fff, #aaa);
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        button.ai-btn.auto-active {
+            background: linear-gradient(135deg, #ff4757, #ff6b81);
+            box-shadow: 0 0 15px rgba(255, 71, 87, 0.4);
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.8;
+            }
+
+            100% {
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="win-overlay">
+        <div class="win-card">
+            <h2 style="color: var(--high-rank); margin:0;">TARGET ACQUIRED</h2>
+            <div class="win-word" id="win-word_disp">SECRET</div>
+            <p style="color: #aaa;">Semantic convergence achieved.</p>
+            <button class="ai-btn" onclick="startNewGame()">INITIALIZE NEW TARGET</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Left: Game Interface -->
+        <div class="game-column">
+            <header>
+                <div>
+                    <h1>CONTEXTO<span style="color:var(--accent-color)">.AI</span></h1>
+                    <div class="tag">System v2.1 // GloVe-100d</div>
+                </div>
+                <div id="debug-word" style="font-family: monospace; color: #333; font-size: 0.8rem; user-select: none;">
+                </div>
+            </header>
+
+            <div class="input-area">
+                <div class="input-group">
+                    <input type="text" id="guess-input" placeholder="Enter semantic probe..." autocomplete="off">
+                </div>
+                <div id="msg-area" class="error-msg"></div>
+            </div>
+
+            <div id="guesses-scroll">
+                <div id="guesses-list"></div>
+            </div>
+        </div>
+
+        <!-- Right: Visualization & AI -->
+        <div class="vis-column">
+            <!-- 3D Graph Card -->
+            <div class="vis-card" style="flex: 2;">
+                <div class="vis-header">
+                    <div class="vis-title">SEMANTIC SPACE MANIFOLD</div>
+                    <div class="tag">PCA Projection (3D)</div>
+                </div>
+                <div id="graph-container"></div>
+                <div
+                    style="margin-top:10px; font-size: 0.75rem; color: #555; display:flex; gap:15px; justify-content: center;">
+                    <span style="display:flex; align-items:center; gap:5px;"><span
+                            style="width:8px; height:8px; background:var(--high-rank); border-radius:50%;"></span> High
+                        Relevance</span>
+                    <span style="display:flex; align-items:center; gap:5px;"><span
+                            style="width:8px; height:8px; background:var(--mid-rank); border-radius:50%;"></span> Mid
+                        Relevance</span>
+                    <span style="display:flex; align-items:center; gap:5px;"><span
+                            style="width:8px; height:8px; background:var(--low-rank); border-radius:50%;"></span> Low
+                        Relevance</span>
+                </div>
+            </div>
+
+            <!-- AI Panel Card -->
+            <div class="vis-card ai-panel" style="flex: 1;">
+                <div class="vis-header">
+                    <div class="vis-title">AI CO-PILOT</div>
+                    <div class="tag">Solver Module Active</div>
+                </div>
+
+                <div class="ai-controls">
+                    <button class="ai-btn" onclick="askAI()">EXECUTE AI GUESS</button>
+                    <button id="btn-auto" class="ai-btn" style="background:#444;"
+                        onclick="toggleAutoPlay()">AUTO-PLAY</button>
+                    <div style="font-size: 0.8rem; color: #888;">
+                        Strategy: <span style="color: white;">Centroid Pruning</span>
+                    </div>
+                </div>
+
+                <div id="ai-reasoning" class="ai-status">
+                    Standby. Waiting for input vector...
+                </div>
+
+                <div class="ai-meta">
+                    <div>
+                        <strong>Model Architecture</strong>
+                        GloVe (Global Vectors)
+                    </div>
+                    <div>
+                        <strong>Embedding Dim</strong>
+                        100 Dimensions
+                    </div>
+                    <div>
+                        <strong>Vocabulary</strong>
+                        40,000 Tokens
+                    </div>
+                    <div>
+                        <strong>Distance Metric</strong>
+                        Cosine Similarity
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_NEW_GAME = '/api/new_game';
+        const API_GUESS = '/api/guess';
+        const API_AI_GUESS = '/api/ai/guess';
+
+        let guesses = [];
+        let gameActive = true;
+        let autoPlay = false;
+
+        // Plotly Traces
+        let tracePoints = {
+            x: [], y: [], z: [],
+            mode: 'markers',
+            type: 'scatter3d',
+            text: [],
+            hoverinfo: 'text',
+            marker: {
+                size: [],
+                color: [],
+                colorscale: 'Plasma', // Cool sci-fi scale
+                opacity: 0.9,
+                line: { color: 'rgba(255,255,255,0.2)', width: 1 }
+            }
+        };
+
+        // Line trace to show trajectory
+        let tracePath = {
+            x: [], y: [], z: [],
+            mode: 'lines',
+            type: 'scatter3d',
+            line: {
+                color: 'rgba(0, 212, 255, 0.3)',
+                width: 2,
+                dash: 'solid'
+            },
+            hoverinfo: 'skip'
+        };
+
+        // Target trace (only populated on win)
+        let traceTarget = {
+            x: [], y: [], z: [],
+            mode: 'markers+text',
+            type: 'scatter3d',
+            text: ['TARGET'],
+            marker: { size: 15, color: '#ffffff', symbol: 'diamond', line: { color: '#00ff9d', width: 2 } },
+            hoverinfo: 'text'
+        };
+
+        // Background cosmic trace
+        let traceBackground = {
+            x: [], y: [], z: [],
+            mode: 'markers',
+            type: 'scatter3d',
+            text: 'Semantic Field',
+            hoverinfo: 'none',
+            marker: {
+                size: 2,
+                color: '#888', // Brighter
+                opacity: 0.4   // More visible
+            }
+        };
+
+        // Updated Layout for visibility
+        const layout = {
+            margin: { l: 0, r: 0, b: 0, t: 0 },
+            paper_bgcolor: '#111',
+            plot_bgcolor: '#111',
+            scene: {
+                xaxis: {
+                    visible: true,
+                    showgrid: true,
+                    gridcolor: '#2a2a2e',
+                    zerolinecolor: '#444',
+                    showticklabels: false,
+                    title: ''
+                },
+                yaxis: {
+                    visible: true,
+                    showgrid: true,
+                    gridcolor: '#2a2a2e',
+                    zerolinecolor: '#444',
+                    showticklabels: false,
+                    title: ''
+                },
+                zaxis: {
+                    visible: true,
+                    showgrid: true,
+                    gridcolor: '#2a2a2e',
+                    zerolinecolor: '#444',
+                    showticklabels: false,
+                    title: ''
+                },
+                camera: { eye: { x: 1.5, y: 1.5, z: 1.2 } },
+                bgcolor: '#111',
+                dragmode: 'orbit'
+            },
+            showlegend: false
+        };
+
+        function initGraph() {
+            Plotly.newPlot('graph-container', [traceBackground, tracePoints, tracePath, traceTarget], layout, { displayModeBar: false, responsive: true });
+        }
+
+        function updateGraph(word, coords, rank) {
+            if (!coords) return;
+
+            // Add point
+            tracePoints.x.push(coords[0]);
+            tracePoints.y.push(coords[1]);
+            tracePoints.z.push(coords[2]);
+            tracePoints.text.push(`${word.toUpperCase()} (#${rank})`);
+
+            // Size logic
+            let size = Math.max(4, 12 - Math.log10(rank) * 2);
+            tracePoints.marker.size.push(size);
+
+            // Color logic
+            let c = '#ff4757'; // Low
+            if (rank <= 300) c = '#00ff9d'; // High
+            else if (rank <= 1000) c = '#ffd700'; // Mid
+            tracePoints.marker.color.push(c);
+
+            // Path logic
+            tracePath.x.push(coords[0]);
+            tracePath.y.push(coords[1]);
+            tracePath.z.push(coords[2]);
+
+            Plotly.react('graph-container', [traceBackground, tracePoints, tracePath, traceTarget], layout);
+        }
+
+        function revealTarget(coords) {
+            if (!coords) return;
+            traceTarget.x = [coords[0]];
+            traceTarget.y = [coords[1]];
+            traceTarget.z = [coords[2]];
+            Plotly.react('graph-container', [traceBackground, tracePoints, tracePath, traceTarget], layout);
+        }
+
+        /* --- Game Logic --- */
+
+        async function startNewGame() {
+            guesses = [];
+            stopAutoPlay();
+            document.getElementById('guesses-list').innerHTML = '';
+            document.getElementById('guess-input').value = '';
+            document.getElementById('guess-input').disabled = false;
+            document.getElementById('win-overlay').classList.remove('active');
+            document.getElementById('ai-reasoning').innerText = 'Standby. Waiting for input vector...';
+            document.getElementById('msg-area').innerText = '';
+
+            // Reset Visuals
+            tracePoints.x = []; tracePoints.y = []; tracePoints.z = [];
+            tracePoints.text = []; tracePoints.marker.size = []; tracePoints.marker.color = [];
+            tracePath.x = []; tracePath.y = []; tracePath.z = [];
+            traceTarget.x = []; traceTarget.y = []; traceTarget.z = [];
+            traceBackground.x = []; traceBackground.y = []; traceBackground.z = [];
+
+            initGraph();
+
+            try {
+                const res = await fetch(API_NEW_GAME, { method: 'POST' });
+                const data = await res.json();
+                console.log("New game:", data);
+
+                // Background Stars
+                if (data.background && data.background.length > 0) {
+                    const bg = data.background;
+                    // Unzip
+                    traceBackground.x = bg.map(p => p[0]);
+                    traceBackground.y = bg.map(p => p[1]);
+                    traceBackground.z = bg.map(p => p[2]);
+                    Plotly.react('graph-container', [traceBackground, tracePoints, tracePath, traceTarget], layout);
+                }
+
+                if (data.debug_word) {
+                    // document.getElementById('debug-word').innerText = `DEBUG: ${data.debug_word}`; // User disabled
+                }
+                gameActive = true;
+            } catch (e) {
+                console.error(e);
+                document.getElementById('msg-area').innerText = "System Failure: API Unreachable";
+            }
+        }
+
+        async function handleGuess(wordFromAI = null) {
+            if (!gameActive) return;
+
+            const input = document.getElementById('guess-input');
+            const word = wordFromAI || input.value.trim().toLowerCase();
+
+            if (!word) return;
+            input.value = '';
+            document.getElementById('msg-area').innerText = '';
+
+            if (guesses.some(g => g.word === word)) {
+                document.getElementById('msg-area').innerText = `Duplicate vector: '${word}'`;
+                return;
+            }
+
+            try {
+                const res = await fetch(API_GUESS, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ word })
+                });
+
+                const data = await res.json();
+                if (data.error) {
+                    document.getElementById('msg-area').innerText = `Error: ${data.error}`;
+                    return;
+                }
+
+                // data = { word, rank, distance, coords, target_coords (if win) }
+                addGuess(data);
+                updateGraph(data.word, data.coords, data.rank);
+
+                if (data.rank === 1) {
+                    winGame(data.word, data.target_coords);
+                }
+
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        async function askAI() {
+            if (!gameActive) return false;
+            const statusEl = document.getElementById('ai-reasoning');
+            statusEl.innerHTML = '<span style="color:#00d4ff">Calculating vectors...</span>';
+
+            try {
+                const res = await fetch(API_AI_GUESS, { method: 'POST' });
+                const data = await res.json();
+
+                statusEl.innerText = `>> ${data.reasoning}`;
+                statusEl.style.borderLeftColor = "#00d4ff";
+
+                addGuess(data);
+                updateGraph(data.word, data.coords, data.rank);
+
+                if (data.rank === 1) {
+                    winGame(data.word, data.coords); // Guess IS target
+                    return true;
+                }
+                return false;
+
+            } catch (e) {
+                statusEl.innerText = "Error: AI Module Offline";
+                console.error(e);
+                return false;
+            }
+        }
+
+        // Auto Play Logic
+        function toggleAutoPlay() {
+            if (!gameActive) return;
+            autoPlay = !autoPlay;
+            const btn = document.getElementById('btn-auto');
+
+            if (autoPlay) {
+                btn.innerText = 'STOP AUTO';
+                btn.classList.add('auto-active');
+                runAutoLoop();
+            } else {
+                stopAutoPlay();
+            }
+        }
+
+        function stopAutoPlay() {
+            autoPlay = false;
+            const btn = document.getElementById('btn-auto');
+            if (btn) {
+                btn.innerText = 'AUTO-PLAY';
+                btn.classList.remove('auto-active');
+            }
+        }
+
+        async function runAutoLoop() {
+            while (autoPlay && gameActive) {
+                const won = await askAI();
+                if (won) break;
+
+                // Wait a bit
+                await new Promise(r => setTimeout(r, 1500));
+            }
+            stopAutoPlay();
+        }
+
+        function addGuess(data) {
+            guesses.push(data);
+            guesses.sort((a, b) => a.rank - b.rank); // Sort by Rank (Ascending)
+            renderList();
+        }
+
+        function renderList() {
+            const list = document.getElementById('guesses-list');
+            list.innerHTML = '';
+
+            guesses.forEach(g => {
+                const div = document.createElement('div');
+                div.className = 'guess-row';
+
+                let c = 'rank-low';
+                if (g.rank === 1) c = 'rank-1';
+                else if (g.rank <= 300) c = 'rank-high';
+                else if (g.rank <= 1000) c = 'rank-mid';
+
+                div.classList.add(c);
+                div.innerHTML = `
+                <span style="font-weight:500; font-size:1.05rem;">${g.word}</span> 
+                <span class="rank-badge">#${g.rank}</span>
+            `;
+                list.appendChild(div);
+            });
+        }
+
+        function winGame(word, targetCoords) {
+            gameActive = false;
+            if (targetCoords) revealTarget(targetCoords);
+            document.getElementById('win-word_disp').innerText = word;
+            document.getElementById('win-overlay').classList.add('active');
+            stopAutoPlay();
+
+            // Confetti effect or something?
+        }
+
+        document.getElementById('guess-input').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') handleGuess();
+        });
+
+        // Start
+        initGraph();
+        startNewGame();
+
+        // Resize graph on window resize
+        window.onresize = function () {
+            Plotly.Plots.resize(document.getElementById('graph-container'));
+        };
+    </script>
+</body>
+
+</html>
